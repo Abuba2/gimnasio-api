@@ -13,6 +13,11 @@ API REST para la gestión de reservas de clases de un gimnasio, construida con J
 | Persistencia | Spring Data JPA · Hibernate |
 | Base de datos | MySQL 8 |
 | Validación | Bean Validation (Jakarta) |
+| Seguridad | Spring Security · JWT (JJWT) |
+| Documentación | OpenAPI / Swagger (springdoc) |
+| Tests | JUnit 5 · Mockito · AssertJ · H2 |
+| Contenedores | Docker · Docker Compose |
+| CI | GitHub Actions |
 | Build | Maven |
 | Utilidades | Lombok |
 
@@ -46,6 +51,37 @@ Una reserva solo se acepta si pasa las cuatro comprobaciones:
 Las reglas 3 y 4 solo cuentan las reservas en estado `CONFIRMADA`. Una reserva cancelada libera la plaza y permite al socio volver a apuntarse.
 
 Las comprobaciones se ordenan de la más barata a la más cara: primero los campos ya cargados en memoria, y solo después las consultas a la base de datos.
+
+---
+
+## Autenticación
+
+Todos los endpoints salvo `/api/auth/**` y la documentación requieren un token JWT en la cabecera:
+
+```
+Authorization: Bearer <token>
+```
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `POST` | `/api/auth/registro` | Alta de usuario. Devuelve el token |
+| `POST` | `/api/auth/login` | Autenticación. Devuelve el token |
+
+Dos roles: `USER` consulta clases y gestiona sus reservas; `ADMIN` administra salas, monitores, socios y consulta todas las reservas.
+
+El administrador inicial se crea al arrancar si se definen las variables `ADMIN_EMAIL` y `ADMIN_PASSWORD`.
+
+---
+
+## Documentación interactiva
+
+Con la aplicación en marcha:
+
+```
+http://localhost:8080/swagger-ui.html
+```
+
+Incluye el botón **Authorize** para pegar el token y probar los endpoints protegidos desde el navegador.
 
 ---
 
@@ -110,7 +146,13 @@ Las comprobaciones se ordenan de la más barata a la más cara: primero los camp
 
 **Estados como `enum` con `EnumType.STRING`.** Nunca `ORDINAL`: guarda la posición en el enum, así que insertar un valor nuevo en medio cambiaría el significado de todas las filas existentes.
 
-**Credenciales fuera del código.** La contraseña de la base de datos se lee de la variable de entorno `DB_PASSWORD`.
+**Credenciales fuera del código.** Ni la contraseña de la base de datos ni la clave de firma de los tokens aparecen en el repositorio: se leen de las variables de entorno `DB_PASSWORD` y `JWT_SECRET`.
+
+**Autenticación sin estado.** La sesión se configura como `STATELESS`: el servidor no guarda nada entre peticiones y la identidad viaja en el token, firmado con HMAC. Eso permite escalar a varias instancias sin sesiones compartidas.
+
+**Contraseñas con BCrypt.** Se almacena el hash, nunca la contraseña. BCrypt incorpora una sal distinta por usuario y es deliberadamente lento, lo que encarece los ataques por fuerza bruta.
+
+**Errores de autenticación en el mismo formato que el resto.** Un `AuthenticationEntryPoint` y un `AccessDeniedHandler` propios devuelven 401 y 403 con la misma estructura JSON que el resto de la API, en lugar de la página de error por defecto de Spring Security.
 
 ---
 
@@ -122,34 +164,64 @@ Las comprobaciones se ordenan de la más barata a la más cara: primero los camp
 
 ---
 
-## Puesta en marcha
+## Puesta en marcha con Docker
 
-**Requisitos:** JDK 21, Maven, MySQL 8.
+La forma recomendada: levanta la base de datos y la aplicación con un solo comando.
+
+```bash
+cp .env.example .env     # y edita los valores
+docker compose up --build
+```
+
+---
+
+## Puesta en marcha manual
+
+**Requisitos:** JDK 21 y MySQL 8.
 
 ```sql
 CREATE DATABASE gimnasio;
 ```
 
 ```bash
-export DB_PASSWORD=tu_contraseña      # Windows: set DB_PASSWORD=tu_contraseña
+export DB_PASSWORD=tu_contraseña
+export JWT_SECRET=una-clave-de-al-menos-32-caracteres
+export ADMIN_EMAIL=admin@gimnasio.com
+export ADMIN_PASSWORD=tu_contraseña_de_admin
+
 ./mvnw spring-boot:run
 ```
 
-La API queda disponible en `http://localhost:8080`.
+### Primer uso
 
 ```bash
-curl -X POST http://localhost:8080/api/salas \
+curl -X POST http://localhost:8080/api/auth/registro \
   -H "Content-Type: application/json" \
-  -d '{"nombre":"Sala de spinning","aforo":20}'
+  -d '{"email":"socio@mail.com","password":"micontrasena123"}'
 ```
+
+La respuesta incluye el token. A partir de ahí:
+
+```bash
+curl http://localhost:8080/api/clases \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+## Tests
+
+```bash
+./mvnw test
+```
+
+11 tests. Los de servicio usan mocks y no necesitan base de datos; el de contexto levanta la aplicación contra H2 en memoria. GitHub Actions los ejecuta en cada push a `main`.
 
 ---
 
 ## Pendiente
 
-- [ ] Tests unitarios y de integración (JUnit 5 + Mockito)
-- [ ] Autenticación con Spring Security y JWT
-- [ ] Documentación con OpenAPI / Swagger
-- [ ] Contenedorización con Docker
-- [ ] Integración continua con GitHub Actions
-- [ ] Despliegue
+- [ ] Despliegue en un proveedor cloud
+- [ ] Bloqueo optimista para la condición de carrera del aforo
+- [ ] Migraciones versionadas (Flyway) para sustituir `ddl-auto`
+- [ ] Tests de controlador con MockMvc

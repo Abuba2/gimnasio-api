@@ -2,6 +2,10 @@
 
 API REST para la gestión de reservas de clases de un gimnasio, construida con Java 21 y Spring Boot.
 
+**Desplegada:** [gimnasio-api-production-19a6.up.railway.app](https://gimnasio-api-production-19a6.up.railway.app/swagger-ui.html)
+
+Para probarla: regístrate en `POST /api/auth/registro`, copia el token de la respuesta, pulsa **Authorize** en Swagger y pégalo.
+
 ---
 
 ## Stack

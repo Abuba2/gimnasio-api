@@ -12,6 +12,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
@@ -63,6 +65,16 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ErrorResponse> rutaNoExiste(NoResourceFoundException ex, WebRequest req) {
         return construir(HttpStatus.NOT_FOUND, "La ruta solicitada no existe", req);
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ErrorResponse> credencialesInvalidas(AuthenticationException ex, WebRequest req) {
+        return construir(HttpStatus.UNAUTHORIZED, "Email o contrasena incorrectos", req);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> accesoDenegado(AccessDeniedException ex, WebRequest req) {
+        return construir(HttpStatus.FORBIDDEN, "No tienes permisos para esta operacion", req);
     }
 
     @ExceptionHandler(Exception.class)
